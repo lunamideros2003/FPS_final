@@ -23,12 +23,6 @@ public class EnemyHealth : MonoBehaviour {
     [Header("Death Settings")]
     [Tooltip("Time before destroying the body")]
     public float destroyDelay = 5f;
-    [Tooltip("Use ragdoll on death")]
-    public bool useRagdoll = false;
-    [Tooltip("Ragdoll root (optional)")]
-    public GameObject ragdollRoot;
-    [Tooltip("Delay before enabling ragdoll (let animation play first)")]
-    public float ragdollDelay = 1f;
     [Tooltip("Drops on death")]
     public GameObject[] dropItems;
     [Tooltip("Drop chance (0-1)")]
@@ -55,12 +49,11 @@ public class EnemyHealth : MonoBehaviour {
         if (healthBarCanvas && hideWhenFull) {
             healthBarCanvas.enabled = false;
         }
-        
+
         Debug.Log("[EnemyHealth] " + gameObject.name + " inicializado con " + maxHealth + " de vida");
     }
-    
+
     void Start() {
-        // Verificar que la vida esté correctamente inicializada
         if (currentHealth <= 0) {
             currentHealth = maxHealth;
             Debug.LogWarning("[EnemyHealth] " + gameObject.name + " tenía vida en 0, reiniciada a " + maxHealth);
@@ -133,100 +126,57 @@ public class EnemyHealth : MonoBehaviour {
         if (isDead) return;
 
         isDead = true;
-
         Debug.Log(gameObject.name + " has died!");
 
-        // Play death sound
+        // 🔹 Play death sound
         if (deathSound) {
             deathSound.Play();
         }
 
-        // Disable AI
-        if (enemyAI) {
-            enemyAI.enabled = false;
-        }
-
-        // Stop NavMeshAgent
+        // 🔹 Disable AI and navigation
+        if (enemyAI) enemyAI.enabled = false;
         if (agent) {
             agent.isStopped = true;
             agent.enabled = false;
         }
 
-        // Play death animation
+        // 🔹 Play death animation
         if (animator) {
             animator.SetTrigger("Death");
-            
-            // Evitar que otras animaciones interrumpan la muerte
             animator.SetFloat("Speed", 0);
         }
 
-        // Disable main collider (keep ragdoll colliders if using ragdoll)
-        if (!useRagdoll) {
-            Collider[] colliders = GetComponents<Collider>();
-            foreach (Collider col in colliders) {
-                col.enabled = false;
-            }
+        // 🔹 Disable colliders to prevent physics glitches
+        Collider[] colliders = GetComponents<Collider>();
+        foreach (Collider col in colliders) {
+            col.enabled = false;
         }
 
-        // Enable ragdoll after animation plays a bit
-        if (useRagdoll && ragdollRoot) {
-            StartCoroutine(EnableRagdollAfterDelay(ragdollDelay, deathDirection));
+        // 🔹 Stop any Rigidbody from falling
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb) {
+            rb.isKinematic = true;   // desactiva físicas
+            rb.useGravity = false;   // evita caída
         }
 
-        // Drop items
-        DropLoot();
+        // 🔹 Asegura que el enemigo quede fijo en el suelo
+        Vector3 pos = transform.position;
+        transform.position = new Vector3(pos.x, pos.y + 0.05f, pos.z);
 
-        // Hide health bar
+        // 🔹 Ocultar barra de vida
         if (healthBarCanvas) {
             healthBarCanvas.enabled = false;
         }
 
-        // Destroy after delay
+        // 🔹 Soltar loot (si aplica)
+        DropLoot();
+
+        // 🔹 Destruir después de unos segundos
         Destroy(gameObject, destroyDelay);
-    }
-
-    IEnumerator EnableRagdollAfterDelay(float delay, Vector3 deathDirection) {
-        yield return new WaitForSeconds(delay);
-        
-        EnableRagdoll();
-        ApplyDeathForce(deathDirection);
-    }
-
-    void EnableRagdoll() {
-        if (!ragdollRoot) return;
-
-        // Disable animator
-        if (animator) {
-            animator.enabled = false;
-        }
-
-        // Enable ragdoll rigidbodies
-        Rigidbody[] rigidbodies = ragdollRoot.GetComponentsInChildren<Rigidbody>();
-        foreach (Rigidbody rb in rigidbodies) {
-            rb.isKinematic = false;
-        }
-
-        // Enable ragdoll colliders
-        Collider[] colliders = ragdollRoot.GetComponentsInChildren<Collider>();
-        foreach (Collider col in colliders) {
-            col.enabled = true;
-        }
-        
-        Debug.Log(gameObject.name + " ragdoll enabled");
-    }
-
-    void ApplyDeathForce(Vector3 direction) {
-        if (!ragdollRoot) return;
-
-        Rigidbody[] rigidbodies = ragdollRoot.GetComponentsInChildren<Rigidbody>();
-        foreach (Rigidbody rb in rigidbodies) {
-            rb.AddForce(direction * 300f);
-        }
     }
 
     void DropLoot() {
         if (dropItems.Length == 0) return;
-
         if (Random.value > dropChance) return;
 
         GameObject itemToDrop = dropItems[Random.Range(0, dropItems.Length)];
