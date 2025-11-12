@@ -90,6 +90,9 @@ public class EnemyHealth : MonoBehaviour {
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
         lastHitTime = Time.time;
 
+        if (ScoreManager.Instance) {
+            ScoreManager.Instance.AddDamageScore(damage);
+        }   
         Debug.Log(gameObject.name + " health after damage: " + currentHealth);
 
         // Show health bar
@@ -127,6 +130,10 @@ public class EnemyHealth : MonoBehaviour {
 
         isDead = true;
         Debug.Log(gameObject.name + " has died!");
+
+        if (ScoreManager.Instance) {
+           ScoreManager.Instance.AddEnemyKillBonus(100);
+        }
 
         // 🔹 Play death sound
         if (deathSound) {

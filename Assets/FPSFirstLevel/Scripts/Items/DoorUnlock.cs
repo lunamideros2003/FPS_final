@@ -1,8 +1,10 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 /// <summary>
 /// Script para puertas que se desbloquean al recopilar objetos
+/// Ahora integrado con el sistema de puntuación
 /// </summary>
 public class DoorUnlock : MonoBehaviour {
     [Header("Door Settings")]
@@ -14,6 +16,8 @@ public class DoorUnlock : MonoBehaviour {
     public string lockedMessage = "Necesitas recopilar todos los objetos para abrir esta puerta";
     [Tooltip("Mensaje que se muestra cuando está desbloqueada")]
     public string unlockedMessage = "Presiona E para continuar";
+    [Tooltip("Es la puerta final del último nivel")]
+    public bool isFinalDoor = false;
 
     [Header("Visual Feedback")]
     [Tooltip("Material cuando está bloqueada")]
@@ -23,8 +27,13 @@ public class DoorUnlock : MonoBehaviour {
     [Tooltip("Efecto de luz (opcional)")]
     public Light doorLight;
 
+    [Header("Score Screen Settings")]
+    [Tooltip("Tiempo de espera antes de mostrar la pantalla final (solo nivel 3)")]
+    public float finalScreenDelay = 2f;
+
     private bool isUnlocked = false;
     private bool isPlayerNear = false;
+    private bool hasInteracted = false;
     private GameObject player;
     private Renderer doorRenderer;
 
@@ -46,17 +55,15 @@ public class DoorUnlock : MonoBehaviour {
     }
 
     void Update() {
-        if (!player) return;
+        if (!player || hasInteracted) return;
 
         float distance = Vector3.Distance(transform.position, player.transform.position);
         isPlayerNear = distance <= interactionRange;
 
         // Mostrar mensaje si está cerca
-        if (isPlayerNear) {
-            if (isUnlocked) {
-                if (Input.GetKeyDown(KeyCode.E)) {
-                    InteractWithDoor();
-                }
+        if (isPlayerNear && isUnlocked) {
+            if (Input.GetKeyDown(KeyCode.E)) {
+                InteractWithDoor();
             }
         }
     }
@@ -89,11 +96,78 @@ public class DoorUnlock : MonoBehaviour {
     /// Interactuar con la puerta
     /// </summary>
     void InteractWithDoor() {
-        if (!isUnlocked) return;
+        if (!isUnlocked || hasInteracted) return;
 
-        Debug.Log("[DoorUnlock] Puerta abierta - Cargando escena: " + nextSceneName);
-        Time.timeScale = 1f; // Asegurarse de despauser
-        SceneManager.LoadScene(nextSceneName);
+        hasInteracted = true;
+
+        Debug.Log("[DoorUnlock] Puerta abierta - Procesando...");
+
+        // Si es la puerta final del último nivel
+        if (isFinalDoor) {
+            StartCoroutine(ShowFinalScoreSequence());
+        } 
+        // Si es cualquier otro nivel
+        else {
+            ShowLevelCompleteScreen();
+        }
+    }
+
+    /// <summary>
+    /// Muestra la pantalla de nivel completado
+    /// </summary>
+    void ShowLevelCompleteScreen() {
+        LevelCompleteUI levelComplete = FindObjectOfType<LevelCompleteUI>();
+        
+        if (levelComplete) {
+            levelComplete.ShowLevelComplete();
+            Debug.Log("[DoorUnlock] Mostrando pantalla de nivel completado");
+        } else {
+            Debug.LogWarning("[DoorUnlock] No se encontró LevelCompleteUI, cargando escena directamente");
+            LoadNextScene();
+        }
+    }
+
+    /// <summary>
+    /// Secuencia para el nivel final: primero pantalla de nivel, luego pantalla final
+    /// </summary>
+    IEnumerator ShowFinalScoreSequence() {
+        // 1. Mostrar pantalla del nivel 3 completado
+        LevelCompleteUI levelComplete = FindObjectOfType<LevelCompleteUI>();
+        if (levelComplete) {
+            levelComplete.ShowLevelComplete();
+            Debug.Log("[DoorUnlock] Mostrando pantalla de nivel 3 completado");
+        }
+
+        // 2. Esperar unos segundos
+        yield return new WaitForSecondsRealtime(finalScreenDelay);
+
+        // 3. Ocultar pantalla de nivel
+        if (levelComplete && levelComplete.completePanelPanel) {
+            levelComplete.completePanelPanel.SetActive(false);
+        }
+
+        // 4. Mostrar pantalla final con todos los niveles
+        FinalScoreUI finalScore = FindObjectOfType<FinalScoreUI>();
+        if (finalScore) {
+            finalScore.ShowFinalScore();
+            Debug.Log("[DoorUnlock] Mostrando pantalla final del juego");
+        } else {
+            Debug.LogWarning("[DoorUnlock] No se encontró FinalScoreUI");
+        }
+    }
+
+    /// <summary>
+    /// Carga la siguiente escena (llamado desde los botones del UI)
+    /// </summary>
+    public void LoadNextScene() {
+        Time.timeScale = 1f; // Despauser
+        
+        if (!string.IsNullOrEmpty(nextSceneName)) {
+            Debug.Log("[DoorUnlock] Cargando escena: " + nextSceneName);
+            SceneManager.LoadScene(nextSceneName);
+        } else {
+            Debug.LogError("[DoorUnlock] No se configuró el nombre de la siguiente escena");
+        }
     }
 
     /// <summary>
@@ -101,7 +175,6 @@ public class DoorUnlock : MonoBehaviour {
     /// </summary>
     void PlayUnlockAnimation() {
         // Aquí puedes añadir animaciones de apertura, sonidos, etc.
-        // Por ahora solo cambios visuales
         Debug.Log("[DoorUnlock] Puerta animada");
     }
 
@@ -109,10 +182,16 @@ public class DoorUnlock : MonoBehaviour {
         // Mostrar el rango de interacción en el editor
         Gizmos.color = isUnlocked ? Color.green : Color.red;
         Gizmos.DrawWireSphere(transform.position, interactionRange);
+        
+        // Indicador visual si es puerta final
+        if (isFinalDoor) {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(transform.position, Vector3.one * 2f);
+        }
     }
 
     void OnGUI() {
-        if (!isPlayerNear) return;
+        if (!isPlayerNear || hasInteracted) return;
 
         int w = Screen.width;
         int h = Screen.height;

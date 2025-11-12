@@ -108,6 +108,10 @@ public class PlayerHealth : MonoBehaviour {
 
         Debug.Log("Player health after damage: " + currentHealth);
 
+        if (ScoreManager.Instance) {
+            ScoreManager.Instance.SubtractDamageScore(damage);
+        }
+
         // Visual feedback
         overlayAlpha = 0.5f;
         if (damageOverlay) {
